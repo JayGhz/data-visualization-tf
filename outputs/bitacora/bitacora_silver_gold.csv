@@ -1,0 +1,3 @@
+layer_from,layer_to,rule,note,applied_at
+silver,gold,aggregate_f12b,Aggregated financial data by CODIGO_UNICO,2026-05-02T18:55:59.509054+00:00
+silver,gold,aggregate_estado,Aggregated situational data by CODIGO_UNICO and PERIODO,2026-05-02T18:55:59.530522+00:00

@@ -1,0 +1,6 @@
+layer,dataset,rule,note,applied_at,output_file
+profiling,detalle-de-inversiones,generate_profile,"Profiled 260422 rows, 68 columns",2026-05-02T18:54:44.675196+00:00,outputs\profiling\detalle-de-inversiones_profile.csv
+profiling,formato-12b-de-de-inversiones,generate_profile,"Profiled 213214 rows, 54 columns",2026-05-02T18:54:45.638565+00:00,outputs\profiling\formato-12b-de-de-inversiones_profile.csv
+profiling,estado-situacional-de-inversiones,generate_profile,"Profiled 1350449 rows, 6 columns",2026-05-02T18:54:46.986246+00:00,outputs\profiling\estado-situacional-de-inversiones_profile.csv
+profiling,proceso-de-seleccion-de-inversiones,generate_profile,"Profiled 5593594 rows, 14 columns",2026-05-02T18:54:56.415848+00:00,outputs\profiling\proceso-de-seleccion-de-inversiones_profile.csv
+profiling,cierre-de-inversiones,generate_profile,"Profiled 108841 rows, 57 columns",2026-05-02T18:54:57.027026+00:00,outputs\profiling\cierre-de-inversiones_profile.csv

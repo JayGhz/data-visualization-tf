@@ -1,0 +1,15 @@
+layer_from,layer_to,dataset,rule,columns,affected_rows,note,applied_at
+bronze,silver,detalle-de-inversiones,drop_null_cui,CODIGO_UNICO,67,Removed rows without CODIGO_UNICO,2026-05-02T18:55:05.669747+00:00
+bronze,silver,detalle-de-inversiones,drop_duplicate_keys,CODIGO_UNICO,67,Removed duplicate keys for unique dataset,2026-05-02T18:55:05.669747+00:00
+bronze,silver,detalle-de-inversiones,coerce_numeric,^(MONTO|PRESUPUESTO|AVANCE),,Coerced numeric-like columns,2026-05-02T18:55:05.669747+00:00
+bronze,silver,detalle-de-inversiones,parse_dates,FECHA_*|FEC_*,,Parsed date columns to ISO format,2026-05-02T18:55:05.669747+00:00
+bronze,silver,formato-12b-de-de-inversiones,coerce_numeric,^(MONTO|DEVENGADO|PRESUPUESTO|AVANCE|EJECUTADO|VIGENTE|MODIFICADO|DEV_|PIM_),,Coerced numeric-like columns,2026-05-02T18:55:10.454297+00:00
+bronze,silver,formato-12b-de-de-inversiones,parse_dates,FECHA_*|FEC_*,,Parsed date columns to ISO format,2026-05-02T18:55:10.454297+00:00
+bronze,silver,estado-situacional-de-inversiones,coerce_numeric,^(MONTO|PRESUPUESTO|AVANCE),,Coerced numeric-like columns,2026-05-02T18:55:15.501455+00:00
+bronze,silver,estado-situacional-de-inversiones,parse_dates,FECHA_*|FEC_*,,Parsed date columns to ISO format,2026-05-02T18:55:15.501455+00:00
+bronze,silver,proceso-de-seleccion-de-inversiones,coerce_numeric,^(MONTO|PRESUPUESTO|AVANCE|EJECUCION),,Coerced numeric-like columns,2026-05-02T18:55:32.421319+00:00
+bronze,silver,proceso-de-seleccion-de-inversiones,parse_dates,FECHA_*|FEC_*,,Parsed date columns to ISO format,2026-05-02T18:55:32.421319+00:00
+bronze,silver,cierre-de-inversiones,drop_null_cui,CODIGO_UNICO,3447,Removed rows without CODIGO_UNICO,2026-05-02T18:55:35.139827+00:00
+bronze,silver,cierre-de-inversiones,drop_duplicate_keys,CODIGO_UNICO,3446,Removed duplicate keys for unique dataset,2026-05-02T18:55:35.139827+00:00
+bronze,silver,cierre-de-inversiones,coerce_numeric,^(MONTO|TOTAL|PRESUPUESTO|LIQUIDACION),,Coerced numeric-like columns,2026-05-02T18:55:35.139827+00:00
+bronze,silver,cierre-de-inversiones,parse_dates,FECHA_*|FEC_*,,Parsed date columns to ISO format,2026-05-02T18:55:35.139827+00:00
