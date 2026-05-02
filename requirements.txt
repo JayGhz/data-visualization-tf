@@ -1,0 +1,6 @@
+polars
+pyarrow
+matplotlib
+seaborn
+scikit-learn
+sentence-transformers
