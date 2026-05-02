@@ -330,11 +330,11 @@ def plot_f12b_profile(df_f12b: pl.DataFrame, df_det: pl.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def generate_profile_md(dfs: dict[str, pl.DataFrame]) -> None:
-    path = PROJECT_ROOT / "reports" / "profile.md"
+    path = PROJECT_ROOT / "docs" / "Profiling.md"
     print(f"\nGenerating {path.name}...")
     
     with open(path, "w", encoding="utf-8") as f:
-        f.write("# 📊 Data Profile & Pipeline Decisions\n\n")
+        f.write("# Data Profile & Pipeline Decisions\n\n")
         f.write("## 1. Dataset Overview\n")
         for name, df in dfs.items():
             f.write(f"- **{name}**: {df.height:,} rows, {df.width} columns\n")
@@ -385,7 +385,7 @@ def generate_profile_md(dfs: dict[str, pl.DataFrame]) -> None:
                 pct = row['count'] / total * 100
                 f.write(f"| {row['TIPO_INVERSION']} | {row['TIENE_AVAN_FISICO']} | {row['count']:,} | {pct:.1f}% |\n")
 
-    print(f"✅ Profile report saved to {path}")
+    print(f"Profile report saved to {path}")
 
 def run_eda() -> None:
     print("Preliminary Data Profiling — Bronze layer\n")

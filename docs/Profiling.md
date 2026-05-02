@@ -1,4 +1,4 @@
-# 📊 Data Profile & Pipeline Decisions
+# Data Profile & Pipeline Decisions
 
 ## 1. Dataset Overview
 - **Detalle**: 260,425 rows, 68 columns
@@ -108,21 +108,28 @@
 | APROBADO | 60,047 | 23.1% |
 | EN FORMULACION | 232 | 0.1% |
 
-### TIPO_INVERSION vs TIENE_AVAN_FISICO (Crosstab)
-| TIPO_INVERSION | NO (Count) | SI (Count) | % with Progress (SI) |
+### TIPO_INVERSION vs TIENE_AVAN_FISICO
+| TIPO_INVERSION | TIENE_AVAN_FISICO | Count | % of Total |
 | :--- | :--- | :--- | :--- |
-| INTERVENCIONES IRI | 5,149 | 0 | **0.0%** |
-| INVERSIONES IOARR | 36,414 | 18,489 | **33.7%** |
-| PIP MAYOR (SNIP) | 37,412 | 7,729 | **17.1%** |
-| PIP MENOR (SNIP) | 46,569 | 2,437 | **5.0%** |
-| PROGRAMA (SNIP) | 38 | 0 | **0.0%** |
-| PROGRAMA DE INVERSION | 169 | 0 | **0.0%** |
-| PROYECTO DE INVERSION | 78,921 | 26,954 | **25.5%** |
-| PROYECTO EMBLEMATICO | 4 | 116 | **96.7%** |
-| PROYECTO ENERGIA | 1 | 3 | **75.0%** |
-| PROYECTO ESSALUD | 4 | 0 | **0.0%** |
-| PROYECTO FORCOR | 0 | 1 | **100.0%** |
-| PROYECTO FORSUR | 0 | 1 | **100.0%** |
-| PROYECTO LAUDOS | 11 | 0 | **0.0%** |
-| PROYECTO PEIP | 1 | 0 | **0.0%** |
-| PROYECTO SANEAMIENTO | 1 | 1 | **50.0%** |
+| INTERVENCIONES IRI | NO | 5,149 | 2.0% |
+| INVERSIONES IOARR | NO | 36,414 | 14.0% |
+| INVERSIONES IOARR | SI | 18,489 | 7.1% |
+| PIP MAYOR (SNIP) | NO | 37,412 | 14.4% |
+| PIP MAYOR (SNIP) | SI | 7,729 | 3.0% |
+| PIP MENOR (SNIP) | NO | 46,569 | 17.9% |
+| PIP MENOR (SNIP) | SI | 2,437 | 0.9% |
+| PROGRAMA (SNIP) | NO | 38 | 0.0% |
+| PROGRAMA DE INVERSION | NO | 169 | 0.1% |
+| PROYECTO DE INVERSION | NO | 78,921 | 30.3% |
+| PROYECTO DE INVERSION | SI | 26,954 | 10.4% |
+| PROYECTO EMBLEMATICO | NO | 4 | 0.0% |
+| PROYECTO EMBLEMATICO | SI | 116 | 0.0% |
+| PROYECTO ENERGIA | NO | 1 | 0.0% |
+| PROYECTO ENERGIA | SI | 3 | 0.0% |
+| PROYECTO ESSALUD | NO | 4 | 0.0% |
+| PROYECTO FORCOR | SI | 1 | 0.0% |
+| PROYECTO FORSUR | SI | 1 | 0.0% |
+| PROYECTO LAUDOS | NO | 11 | 0.0% |
+| PROYECTO PEIP | NO | 1 | 0.0% |
+| PROYECTO SANEAMIENTO | NO | 1 | 0.0% |
+| PROYECTO SANEAMIENTO | SI | 1 | 0.0% |

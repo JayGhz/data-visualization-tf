@@ -1,4 +1,4 @@
-# 🛠️ Informe Técnico de Ingeniería de Datos: Sistema Invierte.pe
+#  Informe Técnico de Ingeniería de Datos
 **Arquitectura de Pipelines de Datos y Enriquecimiento Semántico**
 
 ## 1. Introducción
