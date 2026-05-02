@@ -293,6 +293,37 @@ def plot_temporal(df: pl.DataFrame) -> None:
     note("Temporal", "Dates", "Multiple formats/YYYYMM", "Parse to datetime/Extract year")
 
 
+# ---------------------------------------------------------------------------
+# 5. F12B — status profile + ULT_PROBLEMA text length
+# ---------------------------------------------------------------------------
+
+def plot_f12b_profile(df_f12b: pl.DataFrame, df_det: pl.DataFrame) -> None:
+    print("\n[5] F12B text and status profile...")
+    fig, axes = plt.subplots(1, 2, figsize=(22, 6))
+
+    # Consistency Crosstab: TIENE_AVAN_FISICO vs TIENE_F12B (from Detalle)
+    if "TIENE_AVAN_FISICO" in df_det.columns and "TIENE_F12B" in df_det.columns:
+        cross = df_det.group_by(["TIENE_AVAN_FISICO", "TIENE_F12B"]).agg(pl.len().alias("cnt")).pivot(on="TIENE_F12B", index="TIENE_AVAN_FISICO", values="cnt")
+        # Plotting as a small heatmap or table in axes[1]
+        sns.heatmap(cross.to_pandas().set_index("TIENE_AVAN_FISICO"), annot=True, fmt=",.0f", cmap="Blues", cbar=False, ax=axes[0])
+        axes[0].set_title("Consistency: TIENE_AVAN_FISICO vs TIENE_F12B")
+
+    # Bar charts instead of pie charts (Using Percentages)
+    if "SITUACION" in df_det.columns:
+        sit_counts = df_det["SITUACION"].value_counts().sort("count", descending=True).head(10)
+        sit_counts = sit_counts.with_columns((pl.col("count") / len(df_det) * 100).alias("pct"))
+        
+        axes[1].barh(sit_counts["SITUACION"].to_list(), sit_counts["pct"].to_list(), color=sns.color_palette("viridis", len(sit_counts)))
+        axes[1].invert_yaxis()
+        axes[1].set_title("Situación (Detalle) - % of Total")
+        axes[1].set_xlabel("Percentage (%)")
+        for i, v in enumerate(sit_counts["pct"]):
+            axes[1].text(v + 0.5, i, f"{v:.1f}%", va="center", fontsize=9)
+
+    plt.suptitle("F12B Profile & Data Consistency", fontsize=13)
+    plt.tight_layout()
+    save(fig, "04_f12b_consistency")
+
 
 # ---------------------------------------------------------------------------
 # 6. Write cleaning rules
@@ -338,29 +369,21 @@ def generate_profile_md(dfs: dict[str, pl.DataFrame]) -> None:
                 f.write(f"| {row['SITUACION']} | {row['count']:,} | {pct:.1f}% |\n")
 
         if "TIPO_INVERSION" in dfs["Detalle"].columns and "TIENE_AVAN_FISICO" in dfs["Detalle"].columns:
-            f.write("\n### TIPO_INVERSION vs TIENE_AVAN_FISICO (Crosstab)\n")
-            f.write("| TIPO_INVERSION | NO (Count) | SI (Count) | % with Progress (SI) |\n")
+            f.write("\n### TIPO_INVERSION vs TIENE_AVAN_FISICO\n")
+            f.write("| TIPO_INVERSION | TIENE_AVAN_FISICO | Count | % of Total |\n")
             f.write("| :--- | :--- | :--- | :--- |\n")
             
-            # Create a pivot table for the report
-            pivot = (
+            cross = (
                 dfs["Detalle"]
-                .pivot(on="TIENE_AVAN_FISICO", index="TIPO_INVERSION", values="CODIGO_UNICO", aggregate_function="len")
-                .fill_null(0)
-                .sort("TIPO_INVERSION")
+                .group_by(["TIPO_INVERSION", "TIENE_AVAN_FISICO"])
+                .agg(pl.len().alias("count"))
+                .sort(["TIPO_INVERSION", "TIENE_AVAN_FISICO"])
             )
             
-            # Ensure both SI and NO columns exist
-            if "SI" not in pivot.columns: pivot = pivot.with_columns(pl.lit(0).alias("SI"))
-            if "NO" not in pivot.columns: pivot = pivot.with_columns(pl.lit(0).alias("NO"))
-            
-            for row in pivot.to_dicts():
-                tipo = row["TIPO_INVERSION"]
-                si = row["SI"]
-                no = row["NO"]
-                total_row = si + no
-                pct_si = (si / total_row * 100) if total_row > 0 else 0
-                f.write(f"| {tipo} | {no:,} | {si:,} | **{pct_si:.1f}%** |\n")
+            total = len(dfs["Detalle"])
+            for row in cross.to_dicts():
+                pct = row['count'] / total * 100
+                f.write(f"| {row['TIPO_INVERSION']} | {row['TIENE_AVAN_FISICO']} | {row['count']:,} | {pct:.1f}% |\n")
 
     print(f"✅ Profile report saved to {path}")
 
@@ -380,6 +403,7 @@ def run_eda() -> None:
     plot_missing(dfs)
     audit_join_overlap(dfs)
     plot_temporal(df_det)
+    plot_f12b_profile(df_f12b, df_det)
     generate_profile_md(dfs)
 
     print("\nPreliminary EDA complete — outputs in reports/eda/")

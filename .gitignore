@@ -8,8 +8,6 @@ venv/
 # Data & Reports (Keep structure, ignore content)
 data/**/*
 !data/.gitkeep
-# reports/**/*
-# !reports/.gitkeep
 
 # Legacy / Archive
 legacy/
