@@ -1,180 +1,280 @@
 """
 05_eda_gold.py
-Post-Gold analytics EDA. Reads from Gold only.
-Visualizes the business-ready data to validate and communicate findings.
+EDA analítico post-Gold. Lee únicamente desde la capa Gold.
+Visualiza los datos listos para negocio para validar y comunicar hallazgos.
 
-Covers:
-  - Problem category distribution (CATEGORIA_PROBLEMA from NLP)
-  - BRECHA distribution by LIFECYCLE and SECTOR
-  - Staleness analysis (DIAS_SIN_REPORTE)
-  - Execution vs Physical scatter (sample)
+Cubre:
+  - Distribución de categorías de problema (CATEGORIA_PROBLEMA — NLP)
+  - Distribución de BRECHA por LIFECYCLE y SECTOR
+  - Análisis de desactualización (DIAS_SIN_REPORTE)
+  - Dispersión Ejecución vs Avance Físico (muestra)
+
+Salida: reports/eda_gold/*.png
 """
 import polars as pl
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
-import seaborn as sns
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from config import GOLD_MASTER, PROJECT_ROOT
 
 REPORT_DIR = PROJECT_ROOT / "reports" / "eda_gold"
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-sns.set_theme(style="darkgrid", font_scale=1.05)
+# ---------- Paleta elegante (fondo blanco) ----------
+C = {
+    "navy":    "#1A3A5C",
+    "blue":    "#2E86AB",
+    "teal":    "#3AAFA9",
+    "green":   "#2D936C",
+    "amber":   "#D4A017",
+    "red":     "#C0392B",
+    "coral":   "#E05A4E",
+    "purple":  "#6C5B7B",
+    "gray":    "#7F8C8D",
+    "light":   "#ECF0F1",
+    "text":    "#2C3E50",
+    "grid":    "#E8E8E8",
+    "bg":      "#FFFFFF",
+    "surface": "#F9FAFB",
+}
+
+SEQ_COLORS = [
+    "#1A3A5C", "#2E86AB", "#3AAFA9", "#2D936C",
+    "#8BC34A", "#D4A017", "#E05A4E", "#C0392B",
+    "#6C5B7B", "#95A5A6",
+]
+
+LAYOUT_BASE = dict(
+    paper_bgcolor=C["bg"],
+    plot_bgcolor=C["surface"],
+    font=dict(color=C["text"], size=12),
+    title_font=dict(size=14, color=C["navy"]),
+    margin=dict(l=70, r=60, t=80, b=60),
+)
 
 
-def save(fig: plt.Figure, name: str) -> None:
+def save(fig: go.Figure, name: str, width: int = 1400, height: int = 680) -> None:
     path = REPORT_DIR / f"{name}.png"
-    fig.savefig(path, dpi=120, bbox_inches="tight")
-    plt.close(fig)
+    fig.write_image(str(path), width=width, height=height, scale=2)
     print(f"  -> {path.name}")
 
 
+def _base(fig: go.Figure, title: str, **kw) -> go.Figure:
+    fig.update_layout(**LAYOUT_BASE, title=dict(text=title, x=0.5), **kw)
+    fig.update_xaxes(showgrid=True, gridcolor=C["grid"], zeroline=False,
+                     linecolor=C["grid"], linewidth=1)
+    fig.update_yaxes(showgrid=True, gridcolor=C["grid"], zeroline=False,
+                     linecolor=C["grid"], linewidth=1)
+    return fig
+
+
 # ---------------------------------------------------------------------------
-# 1. Problem category distribution
+# 1. Distribución de categorías de problema
 # ---------------------------------------------------------------------------
 
 def plot_problem_categories(df: pl.DataFrame) -> None:
     if "CATEGORIA_PROBLEMA" not in df.columns:
-        print("  [skip] CATEGORIA_PROBLEMA not found — run Silver first.")
+        print("  [omitido] CATEGORIA_PROBLEMA no encontrada — ejecutar Silver primero.")
         return
 
-    print("\n[1] Problem category distribution...")
+    print("\n[1] Distribución de categorías de problema...")
     vc = (
         df.filter(pl.col("CATEGORIA_PROBLEMA").is_not_null())
         .group_by("CATEGORIA_PROBLEMA")
-        .agg(pl.len().alias("count"))
-        .sort("count", descending=True)
+        .agg(pl.len().alias("cantidad"))
+        .sort("cantidad", descending=True)
     )
 
-    total_with_problem = vc["count"].sum()
-    vc = vc.with_columns(
-        (pl.col("count") / total_with_problem * 100).alias("pct")
+    total = vc["cantidad"].sum()
+    vc = vc.with_columns((pl.col("cantidad") / total * 100).alias("pct"))
+
+    categorias = vc["CATEGORIA_PROBLEMA"].to_list()
+    cantidades  = vc["cantidad"].to_list()
+    pcts        = vc["pct"].to_list()
+    n           = len(categorias)
+    colores     = (SEQ_COLORS * ((n // len(SEQ_COLORS)) + 1))[:n]
+
+    fig = go.Figure(go.Bar(
+        x=categorias,
+        y=cantidades,
+        marker_color=colores,
+        text=[f"{c:,.0f}<br>({p:.1f}%)" for c, p in zip(cantidades, pcts)],
+        textposition="outside",
+        textfont=dict(size=10, color=C["text"]),
+    ))
+
+    _base(
+        fig,
+        f"Distribución de Cuellos de Botella — Clasificación Semántica NLP"
+        f"<br><sup>({total:,} proyectos con problemas registrados)</sup>",
     )
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    colors = sns.color_palette("rocket", len(vc))
-    bars = ax.bar(vc["CATEGORIA_PROBLEMA"].to_list(), vc["count"].to_list(), color=colors)
-
-    for bar, pct in zip(bars, vc["pct"].to_list()):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 200,
-            f"{bar.get_height():,.0f}\n({pct:.1f}%)",
-            ha="center", va="bottom", fontsize=9
-        )
-
-    ax.set_title(
-        f"Investment Bottleneck Distribution — Semantic NLP Classification\n"
-        f"({total_with_problem:,} projects with registered problems)",
-        fontsize=12
+    fig.update_layout(
+        yaxis=dict(title="Cantidad de Proyectos", tickformat=","),
+        xaxis_title="Categoría de Problema",
     )
-    ax.set_ylabel("Project Count")
-    ax.set_xlabel("Problem Category")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
-    plt.tight_layout()
-    save(fig, "01_problem_categories")
+    save(fig, "01_problem_categories", width=1200, height=620)
 
 
 # ---------------------------------------------------------------------------
-# 2. BRECHA distribution by LIFECYCLE
+# 2. Distribución de BRECHA por LIFECYCLE y SECTOR
 # ---------------------------------------------------------------------------
 
 def plot_brecha(df: pl.DataFrame) -> None:
     if "BRECHA" not in df.columns:
-        print("  [skip] BRECHA not found.")
+        print("  [omitido] BRECHA no encontrada.")
         return
 
-    print("\n[2] BRECHA distribution by LIFECYCLE...")
+    print("\n[2] Distribución de BRECHA por LIFECYCLE...")
     sub = df.filter(
         pl.col("BRECHA").is_not_null() &
         pl.col("BRECHA").is_between(-100, 100)
     )
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 5))
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=[
+            "Distribución de BRECHA por Ciclo de Vida",
+            "BRECHA Mediana por Sector (Top 10 por volumen)",
+        ],
+        horizontal_spacing=0.12,
+    )
 
-    # Distribution by lifecycle
-    for lifecycle, color in [("ACTIVE", "#3498db"), ("CLOSED", "#27ae60")]:
+    # Histogramas solapados por lifecycle
+    lifecycle_colores = {"ACTIVE": C["blue"], "CLOSED": C["green"]}
+    lifecycle_labels  = {"ACTIVE": "Activo", "CLOSED": "Cerrado"}
+    for lifecycle, color in lifecycle_colores.items():
         vals = sub.filter(pl.col("LIFECYCLE") == lifecycle)["BRECHA"].to_numpy()
-        axes[0].hist(vals, bins=60, alpha=0.6, color=color, label=lifecycle, edgecolor="none")
+        if len(vals) == 0:
+            continue
+        fig.add_trace(
+            go.Histogram(
+                x=vals, nbinsx=60,
+                name=lifecycle_labels[lifecycle],
+                marker_color=color,
+                opacity=0.65,
+            ),
+            row=1, col=1,
+        )
 
-    axes[0].axvline(0, color="red", ls="--", lw=1.5, label="No brecha")
-    axes[0].set_title("BRECHA Distribution (Execution - Physical Progress) by Lifecycle")
-    axes[0].set_xlabel("BRECHA (%)")
-    axes[0].set_ylabel("Projects")
-    axes[0].legend()
+    fig.add_vline(x=0, line_dash="dot", line_color=C["red"],
+                  line_width=1.5, annotation_text="Sin brecha",
+                  annotation_font_color=C["red"], row=1, col=1)
 
-    # Median BRECHA per top sectors
-    top_sectors = (
+    # BRECHA mediana por sector
+    top_sectores = (
         sub.group_by("SECTOR")
-        .agg(pl.col("BRECHA").median().alias("median_brecha"), pl.len().alias("n"))
+        .agg(pl.col("BRECHA").median().alias("brecha_mediana"), pl.len().alias("n"))
         .sort("n", descending=True)
         .head(10)
     )
 
-    colors_sectors = ["#e74c3c" if v > 0 else "#2980b9" for v in top_sectors["median_brecha"].to_list()]
-    axes[1].barh(top_sectors["SECTOR"].to_list(), top_sectors["median_brecha"].to_list(), color=colors_sectors)
-    axes[1].axvline(0, color="gray", ls="--", lw=1)
-    axes[1].invert_yaxis()
-    axes[1].set_title("Median BRECHA by Sector (Top 10 by volume)")
-    axes[1].set_xlabel("Median BRECHA (%)")
+    medianas    = top_sectores["brecha_mediana"].to_list()
+    bar_colores = [C["coral"] if v > 0 else C["navy"] for v in medianas]
 
-    plt.suptitle("Execution vs Physical Progress Gap (BRECHA)", fontsize=13)
-    plt.tight_layout()
-    save(fig, "02_brecha_analysis")
+    fig.add_trace(
+        go.Bar(
+            x=medianas,
+            y=top_sectores["SECTOR"].to_list(),
+            orientation="h",
+            marker_color=bar_colores,
+            showlegend=False,
+        ),
+        row=1, col=2,
+    )
+    fig.add_vline(x=0, line_dash="dot", line_color=C["gray"],
+                  line_width=1, row=1, col=2)
+    fig.update_yaxes(autorange="reversed", row=1, col=2)
+
+    _base(fig, "Brecha Ejecución vs Avance Físico (BRECHA)")
+    fig.update_layout(
+        barmode="overlay",
+        legend=dict(x=0.02, y=0.97, bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor=C["grid"], borderwidth=1),
+    )
+    fig.update_xaxes(title_text="BRECHA (%)", row=1, col=1)
+    fig.update_xaxes(title_text="BRECHA Mediana (%)", row=1, col=2)
+    fig.update_yaxes(title_text="Proyectos", row=1, col=1)
+    save(fig, "02_brecha_analysis", width=1500, height=640)
 
 
 # ---------------------------------------------------------------------------
-# 3. Staleness — DIAS_SIN_REPORTE
+# 3. Desactualización — DIAS_SIN_REPORTE
 # ---------------------------------------------------------------------------
 
 def plot_staleness(df: pl.DataFrame) -> None:
     if "DIAS_SIN_REPORTE" not in df.columns:
-        print("  [skip] DIAS_SIN_REPORTE not found.")
+        print("  [omitido] DIAS_SIN_REPORTE no encontrada.")
         return
 
-    print("\n[3] Report staleness (DIAS_SIN_REPORTE)...")
+    print("\n[3] Desactualización de reportes (DIAS_SIN_REPORTE)...")
     sub = df.filter(
         pl.col("DIAS_SIN_REPORTE").is_not_null() &
         (pl.col("LIFECYCLE") == "ACTIVE") &
         (pl.col("DIAS_SIN_REPORTE") >= 0)
     )
 
-    fig, ax = plt.subplots(figsize=(12, 5))
-    vals = np.clip(sub["DIAS_SIN_REPORTE"].to_numpy(), 0, 1000)
-    ax.hist(vals, bins=80, color="#e67e22", alpha=0.85, edgecolor="none")
-    ax.axvline(30,  color="orange", ls="--", label="30 days")
-    ax.axvline(90,  color="red",    ls="--", label="90 days (at-risk)")
-    ax.axvline(180, color="darkred",ls="--", label="180 days (paralyzed)")
-    ax.set_title("Days Since Last Progress Report — Active Projects", fontsize=12)
-    ax.set_xlabel("Days Without Update (capped at 1000)")
-    ax.set_ylabel("Project Count")
-    ax.legend()
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
-
-    stale_30  = int((sub["DIAS_SIN_REPORTE"] > 30).sum())
-    stale_90  = int((sub["DIAS_SIN_REPORTE"] > 90).sum())
-    stale_180 = int((sub["DIAS_SIN_REPORTE"] > 180).sum())
+    vals  = np.clip(sub["DIAS_SIN_REPORTE"].to_numpy(), 0, 1000)
     total = len(sub)
-    print(f"    >30 days without report : {stale_30:,}  ({stale_30/total*100:.1f}%)")
-    print(f"    >90 days without report : {stale_90:,}  ({stale_90/total*100:.1f}%)")
-    print(f"    >180 days without report: {stale_180:,} ({stale_180/total*100:.1f}%)")
 
-    plt.tight_layout()
-    save(fig, "03_staleness")
+    sin_30  = int((sub["DIAS_SIN_REPORTE"] > 30).sum())
+    sin_90  = int((sub["DIAS_SIN_REPORTE"] > 90).sum())
+    sin_180 = int((sub["DIAS_SIN_REPORTE"] > 180).sum())
+    print(f"    >30 días sin reporte : {sin_30:,}  ({sin_30/total*100:.1f}%)")
+    print(f"    >90 días sin reporte : {sin_90:,}  ({sin_90/total*100:.1f}%)")
+    print(f"    >180 días sin reporte: {sin_180:,} ({sin_180/total*100:.1f}%)")
+
+    fig = go.Figure(go.Histogram(
+        x=vals, nbinsx=80,
+        marker_color=C["blue"],
+        opacity=0.80,
+        name="Proyectos",
+    ))
+
+    umbrales = [
+        (30,  C["amber"], "30 días"),
+        (90,  C["coral"], "90 días (en riesgo)"),
+        (180, C["red"],   "180 días (paralizado)"),
+    ]
+    for x_val, color, label in umbrales:
+        fig.add_vline(
+            x=x_val, line_dash="dot", line_color=color, line_width=1.8,
+            annotation_text=label, annotation_position="top right",
+            annotation_font_color=color,
+        )
+
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.98, y=0.93,
+        text=(
+            f"<b>Resumen</b><br>"
+            f">30 días: {sin_30:,} ({sin_30/total*100:.1f}%)<br>"
+            f">90 días: {sin_90:,} ({sin_90/total*100:.1f}%)<br>"
+            f">180 días: {sin_180:,} ({sin_180/total*100:.1f}%)"
+        ),
+        showarrow=False, align="right",
+        bgcolor="rgba(255,255,255,0.85)",
+        bordercolor=C["grid"], borderwidth=1,
+        font=dict(size=11, color=C["text"]),
+    )
+
+    _base(fig, "Días sin Actualización de Reporte — Proyectos Activos")
+    fig.update_layout(
+        xaxis_title="Días sin Actualización (limitado a 1000)",
+        yaxis=dict(title="Cantidad de Proyectos", tickformat=","),
+        showlegend=False,
+    )
+    save(fig, "03_staleness", width=1300, height=640)
 
 
 # ---------------------------------------------------------------------------
-# 4. Execution vs Physical scatter (sampled)
+# 4. Dispersión Ejecución vs Avance Físico
 # ---------------------------------------------------------------------------
 
 def plot_execution_vs_physical(df: pl.DataFrame) -> None:
     if "AVANCE_FISICO" not in df.columns or "AVANCE_EJECUCION" not in df.columns:
-        print("  [skip] AVANCE columns not found.")
+        print("  [omitido] Columnas AVANCE no encontradas.")
         return
 
-    print("\n[4] Execution vs Physical scatter...")
+    print("\n[4] Dispersión Ejecución vs Avance Físico...")
     sub = (
         df.filter(
             pl.col("AVANCE_FISICO").is_not_null() &
@@ -183,35 +283,70 @@ def plot_execution_vs_physical(df: pl.DataFrame) -> None:
         .sample(n=min(15_000, len(df)), seed=42)
     )
 
-    phys = sub["AVANCE_FISICO"].to_numpy()
+    phys  = sub["AVANCE_FISICO"].to_numpy()
     exec_ = sub["AVANCE_EJECUCION"].to_numpy()
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(phys, exec_, alpha=0.08, s=4, color="#2980b9")
-    ax.plot([0, 100], [0, 100], color="red", ls="--", lw=1.5, label="Perfect alignment")
-    ax.set_xlabel("Avance Fisico (%)")
-    ax.set_ylabel("Avance Ejecucion (%)")
-    ax.set_title("Physical vs Financial Execution Progress\n(15k sample — above diagonal = finance ahead)")
-    ax.legend()
-    plt.tight_layout()
-    save(fig, "04_execution_vs_physical")
+    if "LIFECYCLE" in sub.columns:
+        lc_vals   = sub["LIFECYCLE"].to_list()
+        color_map = {"ACTIVE": C["blue"], "CLOSED": C["teal"]}
+        colores   = [color_map.get(lc, C["gray"]) for lc in lc_vals]
+    else:
+        colores = C["blue"]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=phys, y=exec_,
+        mode="markers",
+        marker=dict(color=colores, size=4, opacity=0.20),
+        name="Proyectos",
+    ))
+
+    # Línea de alineación perfecta
+    fig.add_trace(go.Scatter(
+        x=[0, 100], y=[0, 100],
+        mode="lines",
+        line=dict(color=C["red"], dash="dot", width=2),
+        name="Alineación perfecta",
+    ))
+
+    fig.add_annotation(x=72, y=22,
+                       text="Finanzas ADELANTE del físico",
+                       showarrow=False,
+                       font=dict(color=C["coral"], size=10))
+    fig.add_annotation(x=22, y=72,
+                       text="Físico ADELANTE de finanzas",
+                       showarrow=False,
+                       font=dict(color=C["green"], size=10))
+
+    _base(
+        fig,
+        "Progreso Físico vs Ejecución Financiera"
+        "<br><sup>Muestra de 15 000 proyectos — puntos sobre la diagonal = finanzas por delante</sup>",
+    )
+    fig.update_layout(
+        xaxis=dict(title="Avance Físico (%)", range=[-5, 105]),
+        yaxis=dict(title="Avance de Ejecución (%)", range=[-5, 105]),
+        legend=dict(x=0.02, y=0.97, bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor=C["grid"], borderwidth=1),
+    )
+    save(fig, "04_execution_vs_physical", width=900, height=900)
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Punto de entrada
 # ---------------------------------------------------------------------------
 
 def run_eda_gold() -> None:
-    print("Gold EDA — post-pipeline analytics reporting\n")
+    print("EDA Gold — reporte analítico post-pipeline\n")
     df = pl.read_parquet(GOLD_MASTER)
-    print(f"  Gold table: {len(df):,} rows x {df.width} cols\n")
+    print(f"  Tabla Gold: {len(df):,} filas x {df.width} columnas\n")
 
     plot_problem_categories(df)
     plot_brecha(df)
     plot_staleness(df)
     plot_execution_vs_physical(df)
 
-    print("\nGold EDA complete — outputs in reports/eda_gold/")
+    print("\nEDA Gold completo — resultados en reports/eda_gold/")
 
 
 if __name__ == "__main__":

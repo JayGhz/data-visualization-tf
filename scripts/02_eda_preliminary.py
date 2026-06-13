@@ -1,23 +1,20 @@
 """
 02_eda_preliminary.py
-Profiling of Bronze-layer data. Runs AFTER 01_bronze.py, BEFORE 03_silver.py.
+Perfilado de datos de la capa Bronze. Ejecutar DESPUÉS de 01_bronze.py, ANTES de 03_silver.py.
 
-Covers:
-  - Missing value rates per dataset (all columns)
-  - Join overlap audit (CUI cardinality and Venn intersections)
-  - Numeric distribution outlier profiles
-  - Temporal distribution of investment activity
-  - F12B status and ULT_PROBLEMA text length profile
+Cubre:
+  - Tasas de valores faltantes por dataset
+  - Auditoría de solapamiento por CUI
+  - Perfiles de valores atípicos numéricos
+  - Distribución temporal de la actividad de inversión
+  - Perfil de estado F12B y consistencia
 
-Output: reports/eda/*.png + reports/eda/cleaning_rules.md
+Salida: reports/eda/*.png + docs/Profiling.md
 """
 import polars as pl
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
-import seaborn as sns
-import numpy as np  
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from config import (
     DETALLE_BRONZE, F12B_BRONZE, CIERRE_BRONZE,
     PROJECT_ROOT,
@@ -26,31 +23,52 @@ from config import (
 EDA_DIR = PROJECT_ROOT / "reports" / "eda"
 EDA_DIR.mkdir(parents=True, exist_ok=True)
 
-sns.set_theme(style="darkgrid", font_scale=1.05)
+# ---------- Paleta elegante (fondo blanco) ----------
+C = {
+    "navy":    "#1A3A5C",
+    "blue":    "#2E86AB",
+    "teal":    "#3AAFA9",
+    "green":   "#2D936C",
+    "amber":   "#D4A017",
+    "red":     "#C0392B",
+    "coral":   "#E05A4E",
+    "purple":  "#6C5B7B",
+    "gray":    "#7F8C8D",
+    "light":   "#ECF0F1",
+    "text":    "#2C3E50",
+    "grid":    "#E8E8E8",
+    "bg":      "#FFFFFF",
+    "surface": "#F9FAFB",
+}
+
+SEQ_COLORS = [
+    "#1A3A5C", "#2E86AB", "#3AAFA9", "#2D936C",
+    "#8BC34A", "#D4A017", "#E05A4E", "#C0392B",
+    "#6C5B7B", "#95A5A6",
+]
+
+LAYOUT_BASE = dict(
+    paper_bgcolor=C["bg"],
+    plot_bgcolor=C["surface"],
+    font=dict(color=C["text"], size=12),
+    title_font=dict(size=14, color=C["navy"]),
+    margin=dict(l=70, r=50, t=80, b=60),
+)
 
 DETALLE_NUMERIC = [
     "DEV_ANIO_ACTUAL", "AVANCE_FISICO", "PIM_ANIO_ACTUAL",
     "DEVEN_ACUMUL_ANIO_ANT", "COSTO_ACTUALIZADO", "MONTO_VIABLE",
     "AVANCE_EJECUCION", "NUM_HABITANTES_BENEF",
 ]
-DETALLE_CAT = [
-    "SECTOR", "DEPARTAMENTO", "TIPO_INVERSION", "DES_MODALIDAD",
-    "ESTADO", "SITUACION", "MARCO",
-]
-DETALLE_DATES = [
-    "FECHA_REGISTRO", "FECHA_VIABILIDAD",
-    "FEC_INI_EJECUCION", "FEC_FIN_EJECUCION",
-]
 F12B_NUMERIC = [
     "AVANCE_FISICO", "DEVENGADO_ACUMULADO", "AVANCE_EJECUCION",
 ]
-F12B_CAT = ["ULT_ESTADO_SITUACIONAL"]
-YYYYMM_COLS = ["PRIMER_DEVENGADO", "ULTIMO_DEVENGADO"]
 
 CLEANING_RULES: list[dict] = []
 
+
 # ---------------------------------------------------------------------------
-# Helpers
+# Utilidades
 # ---------------------------------------------------------------------------
 
 def iqr_bounds(s: pl.Series) -> tuple[float, float]:
@@ -59,10 +77,9 @@ def iqr_bounds(s: pl.Series) -> tuple[float, float]:
     return q1 - 1.5 * iqr, q3 + 1.5 * iqr
 
 
-def save(fig: plt.Figure, name: str) -> None:
+def save(fig: go.Figure, name: str, width: int = 1400, height: int = 750) -> None:
     path = EDA_DIR / f"{name}.png"
-    fig.savefig(path, dpi=120, bbox_inches="tight")
-    plt.close(fig)
+    fig.write_image(str(path), width=width, height=height, scale=2)
     print(f"  -> {path.name}")
 
 
@@ -71,7 +88,7 @@ def note(dataset: str, variable: str, issue: str, strategy: str) -> None:
         "Dataset": dataset,
         "Variable": variable,
         "Issue": issue,
-        "Strategy": strategy
+        "Strategy": strategy,
     })
 
 
@@ -87,105 +104,142 @@ def clean_cui(df: pl.DataFrame) -> set:
     return set(df["CODIGO_UNICO"].str.replace_all('"', "").str.strip_chars().unique())
 
 
+def _base(fig: go.Figure, title: str, **kw) -> go.Figure:
+    fig.update_layout(**LAYOUT_BASE, title=dict(text=title, x=0.5), **kw)
+    fig.update_xaxes(showgrid=True, gridcolor=C["grid"], zeroline=False,
+                     linecolor=C["grid"], linewidth=1)
+    fig.update_yaxes(showgrid=True, gridcolor=C["grid"], zeroline=False,
+                     linecolor=C["grid"], linewidth=1)
+    return fig
+
+
 # ---------------------------------------------------------------------------
-# 1. Missing value profiles — all three datasets
+# 1. Perfiles de valores faltantes
 # ---------------------------------------------------------------------------
 
 def plot_missing(dfs: dict[str, pl.DataFrame]) -> None:
-    print("\n[1] Missing value profiles...")
-    fig, axes = plt.subplots(1, len(dfs), figsize=(8 * len(dfs), 10))
+    print("\n[1] Perfiles de valores faltantes...")
 
-    for ax, (name, df) in zip(axes, dfs.items()):
+    names = list(dfs.keys())
+    fig = make_subplots(
+        rows=1, cols=len(names),
+        subplot_titles=[f"{nm}  ({len(dfs[nm]):,} filas)" for nm in names],
+        horizontal_spacing=0.08,
+    )
+
+    for col_idx, (name, df) in enumerate(dfs.items(), start=1):
         stats = []
-        for col in df.columns:
-            s = df[col]
-            if s.dtype == pl.String:
-                missing = s.is_null().sum() + (s.str.strip_chars() == "").sum()
-            else:
-                missing = s.is_null().sum()
-            stats.append((col, (missing / len(s)) * 100))
+        for c in df.columns:
+            s = df[c]
+            missing = (
+                s.is_null().sum() + (s.str.strip_chars() == "").sum()
+                if s.dtype == pl.String else s.is_null().sum()
+            )
+            stats.append((c, (missing / len(s)) * 100))
 
         stats = sorted(stats, key=lambda x: -x[1])[:25]
-        cols, vals = zip(*stats)
+        cols_n, vals = zip(*stats)
 
-        colors = ["#e74c3c" if v > 50 else "#e67e22" if v > 20 else "#3498db" for v in vals]
-        ax.barh(cols, vals, color=colors)
-        ax.axvline(20, color="orange", ls="--", alpha=0.6, label="20%")
-        ax.axvline(50, color="red",    ls="--", alpha=0.6, label="50%")
-        ax.invert_yaxis()
-        ax.set_title(f"Missing rates — {name}\n({len(df):,} rows)", fontsize=10)
-        ax.set_xlabel("Missing (%)")
-        ax.legend(fontsize=8)
+        bar_colors = [
+            C["red"] if v > 50 else C["amber"] if v > 20 else C["blue"]
+            for v in vals
+        ]
 
-        for i, (c, v) in enumerate(zip(cols, vals)):
-            ax.text(v + 0.5, i, f"{v:.1f}%", va="center", fontsize=7)
+        fig.add_trace(
+            go.Bar(
+                x=list(vals), y=list(cols_n),
+                orientation="h",
+                marker_color=bar_colors,
+                text=[f"{v:.1f}%" for v in vals],
+                textposition="outside",
+                textfont=dict(size=8, color=C["text"]),
+                showlegend=False,
+            ),
+            row=1, col=col_idx,
+        )
+        for x_val, color in [(20, C["amber"]), (50, C["red"])]:
+            fig.add_vline(x=x_val, line_dash="dot", line_color=color,
+                          opacity=0.6, row=1, col=col_idx)
+
+        for c, v in zip(cols_n, vals):
             if v == 0:
-                note(name, c, "0% missing", "No action")
+                note(name, c, "0% faltante", "Sin acción")
             elif v < 20:
-                note(name, c, f"{v:.1f}% missing", "Retain null")
+                note(name, c, f"{v:.1f}% faltante", "Conservar nulo")
             elif v < 50:
-                note(name, c, f"{v:.1f}% missing", "Flag column, no imputation")
+                note(name, c, f"{v:.1f}% faltante", "Marcar columna, sin imputación")
             else:
-                note(name, c, f"{v:.1f}% missing", "Structurally sparse, Flag only")
+                note(name, c, f"{v:.1f}% faltante", "Estructuralmente disperso, solo marcar")
 
-    plt.suptitle("Missing Value Rates — Bronze Layer (All Datasets)", fontsize=13)
-    plt.tight_layout()
-    save(fig, "01_missing_all_datasets")
+    fig.update_yaxes(autorange="reversed")
+    _base(fig, "Tasas de Valores Faltantes — Capa Bronze (Todos los Datasets)")
+    save(fig, "01_missing_all_datasets", width=1800, height=750)
 
 
 # ---------------------------------------------------------------------------
-# 2. Join overlap audit — CUI cardinality
+# 2. Auditoría de solapamiento CUI
 # ---------------------------------------------------------------------------
 
 def audit_join_overlap(dfs: dict[str, pl.DataFrame]) -> None:
-    print("\n[2] Join overlap audit (CODIGO_UNICO)...")
+    print("\n[2] Auditoría de solapamiento CUI...")
     det  = clean_cui(dfs["Detalle"])
     f12b = clean_cui(dfs["F12B"])
     cie  = clean_cui(dfs["Cierre"])
 
     pairs = {
-        "Detalle / F12B":  det & f12b,
-        "Detalle / Cierre":det & cie,
-        "F12B / Cierre":   f12b & cie,
-        "All three":       det & f12b & cie,
+        "Detalle / F12B":   det & f12b,
+        "Detalle / Cierre": det & cie,
+        "F12B / Cierre":    f12b & cie,
+        "Los tres":         det & f12b & cie,
     }
 
-    print(f"  Detalle unique CUIs  : {len(det):>7,}")
-    print(f"  F12B unique CUIs     : {len(f12b):>7,}")
-    print(f"  Cierre unique CUIs   : {len(cie):>7,}")
-    print(f"  Union (all)          : {len(det | f12b | cie):>7,}")
     for label, s in pairs.items():
         pct = len(s) / len(det) * 100
-        print(f"  {label:<22} : {len(s):>7,}  ({pct:.1f}% of Detalle)")
+        print(f"  {label:<22} : {len(s):>7,}  ({pct:.1f}% de Detalle)")
 
     if len(det & cie) < 10:
-        note("Join Audit", "Detalle/Cierre", "Shared projects < 10", "Use F12B as bridge")
+        note("Auditoría Join", "Detalle/Cierre",
+             "Proyectos compartidos < 10", "Usar F12B como puente")
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(list(pairs.keys()), [len(v) for v in pairs.values()], color="#3498db", alpha=0.85)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
-    ax.set_title("CUI Overlap Between Datasets")
-    ax.set_ylabel("Shared Projects")
-    plt.xticks(rotation=15, ha="right")
-    save(fig, "02_cui_overlap")
+    labels = list(pairs.keys())
+    values = [len(v) for v in pairs.values()]
+
+    fig = go.Figure(go.Bar(
+        x=labels, y=values,
+        marker_color=[C["navy"], C["blue"], C["teal"], C["green"]],
+        text=[f"{v:,}" for v in values],
+        textposition="outside",
+        textfont=dict(size=12, color=C["text"]),
+    ))
+    _base(fig, "Solapamiento de CUI entre Datasets")
+    fig.update_layout(yaxis_title="Proyectos Compartidos", xaxis_title="")
+    save(fig, "02_cui_overlap", width=1000, height=580)
 
 
 # ---------------------------------------------------------------------------
-# 3. Numeric outlier profiles
+# 3. Perfiles de valores atípicos numéricos
 # ---------------------------------------------------------------------------
 
 def plot_numeric_outliers(df: pl.DataFrame, cols: list[str], prefix: str, name: str) -> None:
-    print(f"\n[3] Numeric outlier profiles — {name}...")
+    print(f"\n[3] Perfiles de valores atípicos — {name}...")
     cols_in = [c for c in cols if c in df.columns]
     if not cols_in:
         return
 
     n = len(cols_in)
-    fig, axes = plt.subplots(n, 2, figsize=(16, 4 * n))
-    if n == 1:
-        axes = [axes]
+    fig = make_subplots(
+        rows=n, cols=2,
+        column_widths=[0.25, 0.75],
+        horizontal_spacing=0.06,
+        vertical_spacing=0.06 if n <= 4 else 0.04,
+        subplot_titles=[
+            title
+            for col in cols_in
+            for title in (f"{col} — Diagrama de Caja", f"{col} — Distribución")
+        ],
+    )
 
-    for i, col in enumerate(cols_in):
+    for i, col in enumerate(cols_in, start=1):
         s = df[col].drop_nulls()
         if s.len() == 0:
             continue
@@ -193,45 +247,64 @@ def plot_numeric_outliers(df: pl.DataFrame, cols: list[str], prefix: str, name: 
         lo, hi = iqr_bounds(s)
         n_out   = int(((s < lo) | (s > hi)).sum())
         pct_out = n_out / s.len() * 100
+        arr     = s.to_numpy()
 
-        # Create a single clear plot for each numeric variable
-        fig, (ax_box, ax_hist) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={"height_ratios": (.15, .85)}, sharex=True)
-        
-        # Horizontal Boxplot to show outliers clearly
-        sns.boxplot(x=s.to_numpy(), ax=ax_box, color="#3498db", fliersize=4, linewidth=1.5)
-        ax_box.set(xlabel='')
-        ax_box.set_title(f"Outlier Analysis: {col} (N={len(s):,})", fontsize=12, fontweight='bold')
-        
-        # Histogram with KDE
-        sns.histplot(x=s.to_numpy(), ax=ax_hist, kde=True, color="#2980b9", alpha=0.4)
-        ax_hist.axvline(lo, color="#e74c3c", ls="--", lw=2, alpha=0.7, label=f"Lower Bound ({lo:,.0f})")
-        ax_hist.axvline(hi, color="#e74c3c", ls="--", lw=2, alpha=0.7, label=f"Upper Bound ({hi:,.0f})")
-        
-        # Formatting
-        ax_hist.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-        ax_hist.set_ylabel("Frequency")
-        ax_hist.legend(loc='upper right', frameon=True)
+        # Diagrama de caja
+        fig.add_trace(
+            go.Box(
+                x=arr, orientation="h",
+                marker_color=C["blue"],
+                line_color=C["navy"],
+                fillcolor="rgba(46,134,171,0.20)",
+                showlegend=False,
+            ),
+            row=i, col=1,
+        )
 
+        # Histograma
+        fig.add_trace(
+            go.Histogram(
+                x=arr, nbinsx=60,
+                marker_color=C["blue"],
+                opacity=0.75,
+                showlegend=False,
+            ),
+            row=i, col=2,
+        )
+        for x_val, lbl in [(lo, f"Límite inf. ({lo:,.0f})"),
+                            (hi, f"Límite sup. ({hi:,.0f})")]:
+            fig.add_vline(
+                x=x_val, line_dash="dash", line_color=C["red"],
+                opacity=0.7, row=i, col=2,
+            )
+
+        # Notas de limpieza
         neg = int((s < 0).sum())
         if col in ("AVANCE_FISICO", "AVANCE_EJECUCION"):
             absurd = int((s > 100).sum())
-            note(name, col, f"{pct_out:.1f}% outliers, {absurd} values >100", "Cap at 100.0")
-        elif col in ("COSTO_ACTUALIZADO", "MONTO_VIABLE", "DEVENGADO_ACUMULADO", "DEVEN_ACUMUL_ANIO_ANT"):
-            note(name, col, f"{pct_out:.1f}% outliers", "Keep as is (high-value projects)")
+            note(name, col, f"{pct_out:.1f}% atípicos, {absurd} valores >100", "Limitar a 100")
+        elif col in ("COSTO_ACTUALIZADO", "MONTO_VIABLE",
+                     "DEVENGADO_ACUMULADO", "DEVEN_ACUMUL_ANIO_ANT"):
+            note(name, col, f"{pct_out:.1f}% atípicos",
+                 "Conservar (proyectos de alto valor)")
         else:
-            note(name, col, f"{pct_out:.1f}% outliers, {neg} negatives", "Keep by default")
+            note(name, col, f"{pct_out:.1f}% atípicos, {neg} negativos",
+                 "Conservar por defecto")
 
-    fig.suptitle(f"Numeric Outlier Analysis: {name}", fontsize=13)
-    plt.tight_layout()
-    save(fig, f"{prefix}_numeric_outliers")
+    _base(
+        fig,
+        f"Análisis de Valores Atípicos — {name}",
+        height=max(350 * n, 500),
+    )
+    save(fig, f"{prefix}_numeric_outliers", width=1400, height=max(380 * n, 550))
 
 
 # ---------------------------------------------------------------------------
-# 4. Temporal activity
+# 4. Actividad temporal
 # ---------------------------------------------------------------------------
 
 def plot_temporal(df: pl.DataFrame) -> None:
-    print("\n[4] Temporal analysis...")
+    print("\n[4] Análisis temporal...")
     lf = df.lazy().with_columns([
         pl.col("FECHA_REGISTRO").str.to_datetime(format="%Y-%m-%d %H:%M:%S", strict=False),
         pl.col("FEC_INI_EJECUCION").str.to_datetime(format="%Y-%m-%d %H:%M:%S", strict=False),
@@ -241,32 +314,43 @@ def plot_temporal(df: pl.DataFrame) -> None:
           .alias("primer_dev_year"),
     ])
 
-    reg    = lf.filter(pl.col("FECHA_REGISTRO").is_not_null()).with_columns(pl.col("FECHA_REGISTRO").dt.year().alias("y")).group_by("y").agg(pl.len().alias("cnt")).sort("y").collect()
-    ex_yr  = lf.filter(pl.col("FEC_INI_EJECUCION").is_not_null()).with_columns(pl.col("FEC_INI_EJECUCION").dt.year().alias("y")).group_by("y").agg(pl.len().alias("cnt")).sort("y").collect()
-    dev_yr = lf.filter(pl.col("primer_dev_year").is_not_null()).group_by("primer_dev_year").agg(pl.len().alias("cnt")).sort("primer_dev_year").collect()
+    reg    = (lf.filter(pl.col("FECHA_REGISTRO").is_not_null())
+              .with_columns(pl.col("FECHA_REGISTRO").dt.year().alias("y"))
+              .group_by("y").agg(pl.len().alias("cnt")).sort("y").collect())
+    ex_yr  = (lf.filter(pl.col("FEC_INI_EJECUCION").is_not_null())
+              .with_columns(pl.col("FEC_INI_EJECUCION").dt.year().alias("y"))
+              .group_by("y").agg(pl.len().alias("cnt")).sort("y").collect())
+    dev_yr = (lf.filter(pl.col("primer_dev_year").is_not_null())
+              .group_by("primer_dev_year").agg(pl.len().alias("cnt"))
+              .sort("primer_dev_year").collect())
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 5))
-    for ax, (xs, ys, color, title) in zip(axes, [
-        (reg["y"],                  reg["cnt"],    "#2980b9", "Registrations (fecha_registro)"),
-        (ex_yr["y"],                ex_yr["cnt"],  "#27ae60", "Execution Starts (fec_ini_ejecucion)"),
-        (dev_yr["primer_dev_year"], dev_yr["cnt"], "#8e44ad", "First Expenditure (primer_devengado)"),
-    ]):
-        ax.bar(xs.to_list(), ys.to_list(), color=color, alpha=0.85)
-        ax.set_title(title)
-        ax.set_xlabel("Year")
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
+    series = [
+        (reg["y"].to_list(),                  reg["cnt"].to_list(),   C["navy"],  "Registros (Fecha Registro)"),
+        (ex_yr["y"].to_list(),                ex_yr["cnt"].to_list(), C["blue"],  "Inicio de Ejecución"),
+        (dev_yr["primer_dev_year"].to_list(), dev_yr["cnt"].to_list(), C["teal"], "Primer Devengado"),
+    ]
 
-    plt.suptitle("Temporal Distribution of Investment Activity", fontsize=13)
-    plt.tight_layout()
-    save(fig, "03_temporal_activity")
-    
-    # Date Outlier Check (Comprehensive across columns)
+    fig = make_subplots(
+        rows=1, cols=3,
+        subplot_titles=[s[3] for s in series],
+        horizontal_spacing=0.08,
+    )
+    for col_idx, (xs, ys, color, _) in enumerate(series, start=1):
+        fig.add_trace(
+            go.Bar(x=xs, y=ys, marker_color=color, showlegend=False),
+            row=1, col=col_idx,
+        )
+        fig.update_yaxes(tickformat=",", row=1, col=col_idx)
+
+    _base(fig, "Distribución Temporal de la Actividad de Inversión")
+    save(fig, "04_temporal_activity", width=1600, height=550)
+
+    # Verificación de fechas atípicas
     from datetime import datetime
     this_year = datetime.now().year
-    
-    # Collect columns to check
     df_check = lf.select([
-        c for c in ["FECHA_REGISTRO", "FECHA_VIABILIDAD", "FEC_INI_EJECUCION", "FEC_FIN_EJECUCION"]
+        c for c in ["FECHA_REGISTRO", "FECHA_VIABILIDAD",
+                    "FEC_INI_EJECUCION", "FEC_FIN_EJECUCION"]
         if c in lf.collect_schema().names()
     ]).collect()
 
@@ -274,139 +358,191 @@ def plot_temporal(df: pl.DataFrame) -> None:
         s = df_check[c]
         if s.dtype == pl.String:
             s = s.str.to_datetime(strict=False)
-        
         future = (s.dt.year() > this_year + 5).sum()
         if future > 0:
-            note("Detalle", c, f"{future} extreme future dates (e.g. 2039)", "Nullify in Silver")
+            note("Detalle", c, f"{future} fechas futuras extremas",
+                 "Anular en Silver")
 
-    # Logical consistency: Start >= End
-    if "FEC_INI_EJECUCION" in df_check.columns and "FEC_FIN_EJECUCION" in df_check.columns:
+    if ("FEC_INI_EJECUCION" in df_check.columns
+            and "FEC_FIN_EJECUCION" in df_check.columns):
         ini = df_check["FEC_INI_EJECUCION"]
         fin = df_check["FEC_FIN_EJECUCION"]
-        if ini.dtype == pl.String: ini = ini.str.to_datetime(strict=False)
-        if fin.dtype == pl.String: fin = fin.str.to_datetime(strict=False)
-        
-        bad_logic = ((ini >= fin) & ini.is_not_null() & fin.is_not_null()).sum()
-        if bad_logic > 0:
-            note("Detalle", "Dates", f"{bad_logic} projects with Start >= End", "Flag as INCONSISTENTE in Gold")
-    
-    note("Temporal", "Dates", "Multiple formats/YYYYMM", "Parse to datetime/Extract year")
+        if ini.dtype == pl.String:
+            ini = ini.str.to_datetime(strict=False)
+        if fin.dtype == pl.String:
+            fin = fin.str.to_datetime(strict=False)
+        bad = ((ini >= fin) & ini.is_not_null() & fin.is_not_null()).sum()
+        if bad > 0:
+            note("Detalle", "Fechas",
+                 f"{bad} proyectos con Inicio >= Fin",
+                 "Marcar como INCONSISTENTE en Gold")
+
+    note("Temporal", "Fechas", "Múltiples formatos / YYYYMM",
+         "Parsear a datetime / Extraer año")
 
 
 # ---------------------------------------------------------------------------
-# 5. F12B — status profile + ULT_PROBLEMA text length
+# 5. Perfil F12B — consistencia
 # ---------------------------------------------------------------------------
 
 def plot_f12b_profile(df_f12b: pl.DataFrame, df_det: pl.DataFrame) -> None:
-    print("\n[5] F12B text and status profile...")
-    fig, axes = plt.subplots(1, 2, figsize=(22, 6))
+    print("\n[5] Perfil F12B y consistencia de datos...")
 
-    # Consistency Crosstab: TIENE_AVAN_FISICO vs TIENE_F12B (from Detalle)
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=[
+            "Consistencia: TIENE_AVAN_FISICO vs TIENE_F12B",
+            "Distribución por Situación (Detalle) — % del Total",
+        ],
+        horizontal_spacing=0.12,
+    )
+
+    # Mapa de calor — tabla cruzada de consistencia
     if "TIENE_AVAN_FISICO" in df_det.columns and "TIENE_F12B" in df_det.columns:
-        cross = df_det.group_by(["TIENE_AVAN_FISICO", "TIENE_F12B"]).agg(pl.len().alias("cnt")).pivot(on="TIENE_F12B", index="TIENE_AVAN_FISICO", values="cnt")
-        # Plotting as a small heatmap or table in axes[1]
-        sns.heatmap(cross.to_pandas().set_index("TIENE_AVAN_FISICO"), annot=True, fmt=",.0f", cmap="Blues", cbar=False, ax=axes[0])
-        axes[0].set_title("Consistency: TIENE_AVAN_FISICO vs TIENE_F12B")
+        cross = (
+            df_det
+            .group_by(["TIENE_AVAN_FISICO", "TIENE_F12B"])
+            .agg(pl.len().alias("cnt"))
+            .pivot(on="TIENE_F12B", index="TIENE_AVAN_FISICO", values="cnt")
+        )
+        pdf      = cross.to_pandas().set_index("TIENE_AVAN_FISICO")
+        z        = pdf.values.tolist()
+        x_labels = list(pdf.columns)
+        y_labels = list(pdf.index)
 
-    # Bar charts instead of pie charts (Using Percentages)
+        fig.add_trace(
+            go.Heatmap(
+                z=z, x=x_labels, y=y_labels,
+                colorscale=[
+                    [0.0, "#EBF5FB"],
+                    [0.5, "#2E86AB"],
+                    [1.0, "#1A3A5C"],
+                ],
+                text=[[f"{val:,.0f}" if val is not None else "–"
+                       for val in row] for row in z],
+                texttemplate="%{text}",
+                textfont=dict(size=11),
+                showscale=False,
+            ),
+            row=1, col=1,
+        )
+
+    # Barras horizontales — distribución por SITUACION
     if "SITUACION" in df_det.columns:
-        sit_counts = df_det["SITUACION"].value_counts().sort("count", descending=True).head(10)
-        sit_counts = sit_counts.with_columns((pl.col("count") / len(df_det) * 100).alias("pct"))
-        
-        axes[1].barh(sit_counts["SITUACION"].to_list(), sit_counts["pct"].to_list(), color=sns.color_palette("viridis", len(sit_counts)))
-        axes[1].invert_yaxis()
-        axes[1].set_title("Situación (Detalle) - % of Total")
-        axes[1].set_xlabel("Percentage (%)")
-        for i, v in enumerate(sit_counts["pct"]):
-            axes[1].text(v + 0.5, i, f"{v:.1f}%", va="center", fontsize=9)
+        sit = (
+            df_det["SITUACION"].value_counts()
+            .sort("count", descending=True)
+            .head(10)
+        )
+        pcts  = (sit["count"] / len(df_det) * 100).to_list()
+        names = sit["SITUACION"].to_list()
 
-    plt.suptitle("F12B Profile & Data Consistency", fontsize=13)
-    plt.tight_layout()
-    save(fig, "04_f12b_consistency")
+        fig.add_trace(
+            go.Bar(
+                x=pcts, y=names,
+                orientation="h",
+                marker_color=C["blue"],
+                text=[f"{v:.1f}%" for v in pcts],
+                textposition="outside",
+                textfont=dict(size=9, color=C["text"]),
+                showlegend=False,
+            ),
+            row=1, col=2,
+        )
+        fig.update_yaxes(autorange="reversed", row=1, col=2)
+        fig.update_xaxes(title_text="Porcentaje (%)", row=1, col=2)
+
+    _base(fig, "Perfil F12B y Consistencia de Datos")
+    save(fig, "05_f12b_consistency", width=1400, height=620)
 
 
 # ---------------------------------------------------------------------------
-# 6. Write cleaning rules
+# 6. Reporte de limpieza (Markdown)
 # ---------------------------------------------------------------------------
 
 def generate_profile_md(dfs: dict[str, pl.DataFrame]) -> None:
     path = PROJECT_ROOT / "docs" / "Profiling.md"
-    print(f"\nGenerating {path.name}...")
-    
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("# Data Profile & Pipeline Decisions\n\n")
-        f.write("## 1. Dataset Overview\n")
-        for name, df in dfs.items():
-            f.write(f"- **{name}**: {df.height:,} rows, {df.width} columns\n")
-        
-        f.write("\n## 2. Join Overlap Audit (CODIGO_UNICO)\n")
-        det = set(dfs["Detalle"]["CODIGO_UNICO"].unique())
-        f12b = set(dfs["F12B"]["CODIGO_UNICO"].unique())
-        cie = set(dfs["Cierre"]["CODIGO_UNICO"].unique())
-        
-        f.write("| Connection | Unique Projects | % of Detalle |\n")
-        f.write("| :--- | :--- | :--- |\n")
-        f.write(f"| **Detalle Total** | {len(det):,} | 100% |\n")
-        f.write(f"| **F12B Total** | {len(f12b):,} | {len(f12b)/len(det)*100:.1f}% |\n")
-        f.write(f"| **Cierre Total** | {len(cie):,} | {len(cie)/len(det)*100:.1f}% |\n")
-        f.write(f"| Bridge F12B-Detalle | {len(det & f12b):,} | {len(det & f12b)/len(det)*100:.1f}% |\n")
-        f.write(f"| Bridge F12B-Cierre | {len(f12b & cie):,} | {len(f12b & cie)/len(det)*100:.1f}% |\n")
-        f.write(f"| Direct Detalle-Cierre | {len(det & cie):,} | {len(det & cie)/len(det)*100:.1f}% |\n")
+    print(f"\nGenerando {path.name}...")
 
-        f.write("\n## 3. Data Cleaning & Imputation Plan\n")
-        f.write("| Dataset | Variable | Finding / Issue | Strategy |\n")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("# Perfil de Datos y Decisiones de Pipeline\n\n")
+        f.write("## 1. Resumen de Datasets\n")
+        for name, df in dfs.items():
+            f.write(f"- **{name}**: {df.height:,} filas, {df.width} columnas\n")
+
+        f.write("\n## 2. Auditoría de Solapamiento CUI\n")
+        det  = set(dfs["Detalle"]["CODIGO_UNICO"].unique())
+        f12b = set(dfs["F12B"]["CODIGO_UNICO"].unique())
+        cie  = set(dfs["Cierre"]["CODIGO_UNICO"].unique())
+
+        f.write("| Conexión | Proyectos únicos | % de Detalle |\n")
+        f.write("| :--- | :--- | :--- |\n")
+        f.write(f"| **Total Detalle** | {len(det):,} | 100% |\n")
+        f.write(f"| **Total F12B** | {len(f12b):,} | {len(f12b)/len(det)*100:.1f}% |\n")
+        f.write(f"| **Total Cierre** | {len(cie):,} | {len(cie)/len(det)*100:.1f}% |\n")
+        f.write(f"| Puente F12B-Detalle | {len(det & f12b):,} | {len(det & f12b)/len(det)*100:.1f}% |\n")
+        f.write(f"| Puente F12B-Cierre | {len(f12b & cie):,} | {len(f12b & cie)/len(det)*100:.1f}% |\n")
+        f.write(f"| Directo Detalle-Cierre | {len(det & cie):,} | {len(det & cie)/len(det)*100:.1f}% |\n")
+
+        f.write("\n## 3. Plan de Limpieza e Imputación\n")
+        f.write("| Dataset | Variable | Hallazgo / Problema | Estrategia |\n")
         f.write("| :--- | :--- | :--- | :--- |\n")
         for rule in CLEANING_RULES:
             f.write(f"| {rule['Dataset']} | `{rule['Variable']}` | {rule['Issue']} | {rule['Strategy']} |\n")
-            
-        f.write("\n## 4. Key Indicators Distribution\n")
+
+        f.write("\n## 4. Distribución de Indicadores Clave\n")
         if "SITUACION" in dfs["Detalle"].columns:
             f.write("\n### Situación (Top 5)\n")
             vc = dfs["Detalle"]["SITUACION"].value_counts().sort("count", descending=True).head(5)
-            f.write("| Situación | Count | % |\n| :--- | :--- | :--- |\n")
+            f.write("| Situación | Cantidad | % |\n| :--- | :--- | :--- |\n")
             for row in vc.to_dicts():
-                pct = row['count'] / len(dfs["Detalle"]) * 100
+                pct = row["count"] / len(dfs["Detalle"]) * 100
                 f.write(f"| {row['SITUACION']} | {row['count']:,} | {pct:.1f}% |\n")
 
         if "TIPO_INVERSION" in dfs["Detalle"].columns and "TIENE_AVAN_FISICO" in dfs["Detalle"].columns:
             f.write("\n### TIPO_INVERSION vs TIENE_AVAN_FISICO\n")
-            f.write("| TIPO_INVERSION | TIENE_AVAN_FISICO | Count | % of Total |\n")
+            f.write("| Tipo Inversión | Tiene Avance Físico | Cantidad | % del Total |\n")
             f.write("| :--- | :--- | :--- | :--- |\n")
-            
             cross = (
                 dfs["Detalle"]
                 .group_by(["TIPO_INVERSION", "TIENE_AVAN_FISICO"])
                 .agg(pl.len().alias("count"))
                 .sort(["TIPO_INVERSION", "TIENE_AVAN_FISICO"])
             )
-            
             total = len(dfs["Detalle"])
             for row in cross.to_dicts():
-                pct = row['count'] / total * 100
+                pct = row["count"] / total * 100
                 f.write(f"| {row['TIPO_INVERSION']} | {row['TIENE_AVAN_FISICO']} | {row['count']:,} | {pct:.1f}% |\n")
 
-    print(f"Profile report saved to {path}")
+    print(f"Reporte guardado en {path}")
+
+
+# ---------------------------------------------------------------------------
+# Punto de entrada
+# ---------------------------------------------------------------------------
 
 def run_eda() -> None:
-    print("Preliminary Data Profiling — Bronze layer\n")
+    print("Perfilado Preliminar de Datos — Capa Bronze\n")
 
     df_det  = load_cast(DETALLE_BRONZE, DETALLE_NUMERIC)
     df_f12b = load_cast(F12B_BRONZE,    F12B_NUMERIC)
     df_cie  = pl.read_parquet(CIERRE_BRONZE)
 
-    print(f"  Detalle : {df_det.height:,} rows x {df_det.width} cols")
-    print(f"  F12B    : {df_f12b.height:,} rows x {df_f12b.width} cols")
-    print(f"  Cierre  : {df_cie.height:,} rows x {df_cie.width} cols")
+    print(f"  Detalle : {df_det.height:,} filas x {df_det.width} columnas")
+    print(f"  F12B    : {df_f12b.height:,} filas x {df_f12b.width} columnas")
+    print(f"  Cierre  : {df_cie.height:,} filas x {df_cie.width} columnas")
 
     dfs = {"Detalle": df_det, "F12B": df_f12b, "Cierre": df_cie}
 
     plot_missing(dfs)
     audit_join_overlap(dfs)
+    plot_numeric_outliers(df_det,  DETALLE_NUMERIC, "03_detalle", "Detalle")
+    plot_numeric_outliers(df_f12b, F12B_NUMERIC,    "03_f12b",   "F12B")
     plot_temporal(df_det)
     plot_f12b_profile(df_f12b, df_det)
     generate_profile_md(dfs)
 
-    print("\nPreliminary EDA complete — outputs in reports/eda/")
+    print("\nEDA preliminar completo — resultados en reports/eda/")
 
 
 if __name__ == "__main__":
