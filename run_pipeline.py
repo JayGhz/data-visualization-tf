@@ -21,6 +21,7 @@ import sys
 import time
 from pathlib import Path
 
+
 # Make scripts importable
 PROJECT_ROOT = Path(__file__).parent
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
@@ -28,7 +29,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 
-STEP_ORDER = ["download", "bronze", "eda_preliminary", "silver", "gold", "eda_gold"]
+STEP_ORDER = ["download", "bronze", "eda_preliminary", "silver", "gold", "eda_gold","star_schema"]
 
 
 def import_step(name: str):
@@ -39,6 +40,8 @@ def import_step(name: str):
         "silver":          ("03_silver",           "run_silver"),
         "gold":            ("04_gold",             "run_gold"),
         "eda_gold":        ("05_eda_gold",         "run_eda_gold"),
+        "star_schema":    ("06_star_schema",     "run_star_schema"),
+
     }
     mod_name, fn_name = module_map[name]
     import importlib
@@ -77,3 +80,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     run(args.from_step)
+
