@@ -1,26 +1,25 @@
-# Python virtual environments
-.venv/
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-.python-version
-
-# Conda environments
-.conda/
-conda-meta/
-
-# Environment variable files
-.env
-.env.*
-*.env
-skills/*
-.github
-
-# Cache and log files
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
 
-# Data files
-data/raw/*
+# Data & Reports (Keep structure, ignore content)
+data/**/*
+!data/.gitkeep
+
+# Legacy / Archive
+legacy/
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Large files
+*.parquet
+*.csv
+*.xlsx
+*.png
