@@ -22,4 +22,3 @@ legacy/
 *.parquet
 *.csv
 *.xlsx
-*.png
