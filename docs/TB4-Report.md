@@ -1,7 +1,6 @@
 # Reglas de Métricas, Segmentos y Parámetros
 **Proyecto:** Brecha de Eficiencia en Inversión Pública Peruana (MEF 2020–2026)  
 **Curso:** Data Visualization CC0211 · NRC 18519 · UPC  
-**Equipo:** Cuadros (u20221c488) · Jeri (u202219322) · Quispe (u20211c699)  
 **Entrega:** 4 — Segmentación, cálculos analíticos y fuentes para Tableau
 
 ---
