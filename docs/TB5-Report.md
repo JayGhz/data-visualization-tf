@@ -1,7 +1,6 @@
 # Entrega 5 — Dashboard Alpha y Visualización Exploratoria
 **Proyecto:** Brecha de Eficiencia en Inversión Pública Peruana (MEF 2020–2026)  
-**Curso:** Data Visualization CC0211 · NRC 18519 · UPC  
-**Equipo:** Cuadros (u20221c488) · Jeri (u202219322) · Quispe (u20211c699)
+**Curso:** Data Visualization · UPC  
 
 ---
 
@@ -25,9 +24,9 @@ Solo 20 proyectos (0.007% del universo) califican como CRÍTICO según el semáf
 
 ---
 
-### Insight 4 — El volumen de inversión activa se duplicó entre 2018 y 2024
+### Insight 4 — El volumen de inversión activa creció 4 veces desde 2018 sin cierre proporcional
 
-La vista temporal muestra que los proyectos ACTIVE registrados por año pasaron de aproximadamente 6,000 en 2018 a más de 23,000 en 2024, un crecimiento de casi 4 veces en seis años. Este incremento no estuvo acompañado de un aumento proporcional en los proyectos CLOSED, lo que genera una acumulación de obras en ejecución sin cierre. Si la capacidad de seguimiento del sistema no escala al mismo ritmo, el riesgo de paralización aumenta estructuralmente.
+La vista temporal muestra que los proyectos ACTIVE registrados por año pasaron de aproximadamente 6,000 en 2018 a más de 23,000 en 2024, un crecimiento de casi 4 veces en seis años. Este incremento no estuvo acompañado de un aumento proporcional en los proyectos CLOSED, lo que genera una acumulación de obras en ejecución sin cierre. La línea de referencia en 6,000 proyectos (nivel promedio pre-2018) permite visualizar la magnitud del desbalance estructural. Si la capacidad de seguimiento del sistema no escala al mismo ritmo, el riesgo de paralización aumenta estructuralmente.
 
 ---
 
@@ -41,31 +40,30 @@ Contrario a la hipótesis inicial, el análisis por RANGO_COSTO muestra que los 
 
 ### Gráficos seleccionados
 
-| Vista | Tipo de gráfico | Justificación técnica |
-|---|---|---|
-| Brecha por Sector | Barras horizontales | Permite comparar valores negativos y positivos simultáneamente. El eje horizontal facilita leer etiquetas largas de sectores. El color por SEMAFORO_BRECHA añade una dimensión de alerta sin saturar la vista. |
-| Semáforo Brecha | Barras verticales | Distribución de una variable categórica ordinal. La escala discreta (4 valores) hace innecesario un histograma. La verticalidad permite comparar alturas de forma intuitiva. |
-| Distribución por Rango de Costo | Barras verticales apiladas | Combina dos dimensiones categóricas (rango y lifecycle) en una sola vista. El apilado muestra composición interna sin perder la comparación entre rangos. |
-| Relación Avance Físico vs Ejecución | Scatter plot | Es el único tipo de gráfico que muestra simultáneamente dos variables continuas a nivel de registro individual. La diagonal implícita sirve como referencia de alineación perfecta sin necesidad de anotación adicional. |
-| Mapa Brecha Departamental | Mapa de puntos | La dimensión geográfica es parte de la pregunta analítica ("¿qué regiones presentan mayores cuellos de botella?"). El mapa permite identificar patrones espaciales que un gráfico de barras no revelaría. |
-| Tendencia Temporal de Inversiones | Líneas | La evolución temporal requiere una variable continua en el eje X. Las líneas son superiores a las barras para mostrar tendencia y permiten comparar dos series (ACTIVE vs CLOSED) sin solapamiento visual. |
+| Vista | Tipo de gráfico | Ubicación | Justificación técnica |
+|---|---|---|---|
+| Brecha por Sector | Barras horizontales | Dashboard alpha | Permite comparar valores negativos y positivos simultáneamente. El eje horizontal facilita leer etiquetas largas de sectores. El color por SEMAFORO_BRECHA (gris=normal, ámbar=alerta, rojo=crítico) añade una dimensión de alerta sin saturar la vista. |
+| Semáforo Brecha | Tabla con formato semántico | Dashboard alpha | Las 4 categorías tienen magnitudes tan dispares (CRITICO=20 vs NORMAL=103,509) que una barra haría invisible lo más urgente. La tabla con iconos (❌⚠️✅) y colores semánticos permite leer excepciones críticas de forma inmediata, siguiendo el principio del profe: "pocos casos críticos con formato semántico, no tabla gigante". |
+| Mapa de Proyectos Críticos | Mapa de puntos con color semántico | Dashboard alpha | La dimensión geográfica es parte de la pregunta analítica ("¿qué regiones presentan mayores cuellos de botella?"). El color por SEMAFORO_BRECHA permite identificar dónde se concentran los proyectos en alerta, patrón que un gráfico de barras no revelaría. |
+| Relación Avance Físico vs Ejecución | Scatter plot | Hoja separada | Es el único tipo de gráfico que muestra simultáneamente dos variables continuas a nivel de registro individual. La diagonal implícita sirve como referencia de alineación perfecta. Su densidad (291k puntos) lo hace difícil de leer en el espacio reducido del dashboard. |
+| Distribución por Rango de Costo | Barras verticales apiladas | Hoja separada | Combina dos dimensiones categóricas (rango y lifecycle) en una sola vista. El apilado muestra composición interna sin perder la comparación entre rangos. |
+| Tendencia Temporal de Inversiones | Líneas + línea de referencia | Hoja separada | La evolución temporal requiere una variable continua en el eje X. Las dos líneas (ACTIVE vs CLOSED) en la misma escala permiten ver el desbalance sin eje dual. La línea de referencia en 6,000 proyectos (nivel pre-2018) contextualiza el boom de inversión activa post-2019. |
 
 ---
 
 ### Gráficos descartados
 
-#### Descartado 1 — Pie chart / Gráfico de torta para distribución de SEMAFORO_BRECHA
+#### Descartado 1 — Pie chart para distribución de SEMAFORO_BRECHA
 
 **Descripción:** Se evaluó usar un gráfico circular para mostrar la proporción de proyectos por categoría de semáforo (NORMAL, ALERTA, CRÍTICO, SIN DATO).
 
 **Razón del descarte:**
-El pie chart presenta tres limitaciones críticas para este caso:
 
 1. **Dominancia visual engañosa:** SIN DATO representa el 64.8% del universo. Una torta con un segmento dominante de esa magnitud oculta visualmente las diferencias entre NORMAL (35.1%), ALERTA (0.09%) y CRÍTICO (0.007%), que son justamente los valores de interés analítico.
 2. **Imposibilidad de detectar valores extremos:** Con 4 categorías de magnitudes tan dispares, el pie chart hace virtualmente invisible la categoría CRÍTICO, que es el hallazgo más relevante del proyecto.
-3. **No permite comparación cuantitativa precisa:** El ojo humano no puede estimar ángulos con precisión. Las barras verticales permiten comparar alturas de forma inmediata.
+3. **No permite comparación cuantitativa precisa:** El ojo humano no puede estimar ángulos con precisión. El profe indica explícitamente "evitar pie explotado — comparar ángulos es más difícil que comparar longitudes".
 
-**Alternativa elegida:** Barras verticales (Semáforo Brecha), que mantiene las proporciones legibles y permite ver la diferencia entre ALERTA y CRÍTICO incluso cuando ambos son minoritarios.
+**Alternativa elegida:** Tabla con formato semántico (Semáforo Brecha), que permite leer el valor exacto de cada categoría y resalta visualmente las excepciones mediante iconos y color.
 
 ---
 
@@ -74,13 +72,12 @@ El pie chart presenta tres limitaciones críticas para este caso:
 **Descripción:** Se evaluó usar un treemap para mostrar el volumen de proyectos por sector, donde el tamaño del rectángulo representaría el número de proyectos y el color la brecha media.
 
 **Razón del descarte:**
-El treemap presenta dos problemas fundamentales para este análisis:
 
-1. **Codificación de área imprecisa:** El tamaño de los rectángulos codifica el número de proyectos, pero la pregunta analítica se centra en la BRECHA, no en el volumen. Un sector con muchos proyectos pero brecha baja (como Salud) quedaría visualmente prominente sin ser analíticamente relevante, generando una interpretación errónea.
-2. **Etiquetas ilegibles en valores pequeños:** El universo tiene 36 sectores. Los sectores con pocos proyectos (Universidades, Tribunal Constitucional) generarían rectángulos tan pequeños que sus etiquetas serían ilegibles, perdiendo información relevante.
-3. **Dificulta la comparación de valores negativos:** La brecha puede ser negativa. Un treemap de área no puede representar valores negativos de forma intuitiva, lo que obligaría a añadir una escala de color divergente que compite visualmente con el tamaño.
+1. **Codificación de área imprecisa:** El tamaño de los rectángulos codifica el número de proyectos, pero la pregunta analítica se centra en la BRECHA, no en el volumen. Un sector con muchos proyectos pero brecha baja quedaría visualmente prominente sin ser analíticamente relevante.
+2. **Etiquetas ilegibles en valores pequeños:** El universo tiene 36 sectores. Los sectores con pocos proyectos generarían rectángulos tan pequeños que sus etiquetas serían ilegibles.
+3. **No representa valores negativos:** La brecha puede ser negativa. Un treemap de área no puede representar valores negativos de forma intuitiva.
 
-**Alternativa elegida:** Barras horizontales (Brecha por Sector), que representa directamente el valor de brecha en un eje continuo, permite valores negativos y positivos en la misma escala, y mantiene las etiquetas legibles al estar en el eje vertical.
+**Alternativa elegida:** Barras horizontales (Brecha por Sector), que representa directamente el valor de brecha en un eje continuo con valores negativos y positivos en la misma escala.
 
 ---
 
@@ -89,28 +86,52 @@ El treemap presenta dos problemas fundamentales para este análisis:
 **Descripción:** Se evaluó construir un heatmap cruzando SECTOR (filas) con DEPARTAMENTO (columnas) y coloreando por brecha media.
 
 **Razón del descarte:**
+
 1. **Dimensionalidad excesiva:** 36 sectores × 25 departamentos = 900 celdas. La mayoría estarían vacías porque no todos los sectores tienen proyectos en todos los departamentos, generando un heatmap disperso y difícil de leer.
-2. **Cobertura de la pregunta ya resuelta por vistas separadas:** El mapa departamental y el gráfico de sector responden las mismas preguntas por separado con mayor claridad. Combinarlos en una matriz agrega complejidad sin añadir insight incremental.
+2. **Redundancia con vistas existentes:** El mapa departamental y el gráfico de sector responden las mismas preguntas por separado con mayor claridad. Combinarlos en una matriz agrega complejidad sin añadir insight incremental.
 
-**Alternativa elegida:** Mapa geográfico (dimensión espacial) + barras por sector (dimensión institucional) como vistas independientes que el dashboard conecta mediante filtros cruzados.
-
----
-
-## 3. Flujo de Lectura del Dashboard Alpha
-
-El dashboard está diseñado con el siguiente flujo de lectura para el usuario objetivo (analista de gestión pública):
-
-```
-1. SEMÁFORO BRECHA        → ¿Cuántos proyectos tienen alerta?
-2. DISTRIBUCIÓN POR COSTO → ¿De qué tamaño son los proyectos?
-3. BRECHA POR SECTOR      → ¿Qué sectores tienen mayor desalineación?
-4. MAPA DEPARTAMENTAL     → ¿Dónde están los proyectos con brecha?
-5. SCATTER RELACIÓN       → ¿Qué tan alineados están gasto y avance?
-6. TENDENCIA TEMPORAL     → ¿Cómo evolucionó el stock de inversiones?
-```
-
-Los filtros de **LIFECYCLE** y **SEMAFORO_BRECHA** son globales: al seleccionar una categoría en cualquier vista, todas las demás se actualizan, permitiendo análisis cruzados interactivos.
+**Alternativa elegida:** Mapa geográfico (dimensión espacial) + barras por sector (dimensión institucional) como vistas independientes conectadas por filtros cruzados en el dashboard.
 
 ---
 
-*Entrega 5 — Data Visualization CC0211 · UPC · Junio 2026*
+## 3. Estructura del Dashboard Alpha
+
+### Vistas dentro del dashboard
+```
+┌─────────────────────────────────────────────────────────────┐
+│ HEADER: "276 proyectos gastan más de lo que avanzan;        │
+│ Gobiernos Locales lidera el riesgo"                         │
+│ Periodo: 2020-2026 | Filtro: Lifecycle | Fuente: MEF        │
+├──────────────────────────┬──────────────┬───────────────────┤
+│                          │ Semáforo     │                   │
+│  Brecha por Sector       │ Brecha       │  PANEL DE         │
+│  (vista principal)       │ (tabla)      │  INSIGHTS         │
+│                          ├──────────────┤  1. QUÉ           │
+│                          │ Mapa         │  2. POR QUÉ       │
+│                          │ Proyectos    │  3. ACCIÓN        │
+│                          │ Críticos     │                   │
+├──────────────────────────┴──────────────┴───────────────────┤
+│ Footer: Fuente MEF · Nota: 64.8% sin dato de avance físico  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Hojas separadas (exploratorias)
+- Scatter: Relación Avance Físico vs Ejecución
+- Distribución por Rango de Costo
+- Tendencia Temporal: Stock activo creció 4x desde 2018
+
+### Filtros activos
+- **LIFECYCLE** (ACTIVE / CLOSED) — global a todas las vistas
+- **Use as Filter** activado en Brecha por Sector → filtra el mapa
+
+### Principios de diseño aplicados
+- Paleta de 3 colores semánticos: gris=normal · ámbar=alerta · rojo=crítico
+- Atributos preatentivos: color y posición guían la mirada al dato crítico
+- Título del dashboard = lectura del gráfico, no nombre descriptivo
+- Panel de insights con estructura Hallazgo + Comparación + Evidencia + Acción
+- Tabla de excepciones para semáforo (no barra) — CRITICO visible aunque sea el 0.007%
+- Footer con fuente y advertencia de calidad del dato
+
+---
+
+*Entrega 5 — Data Visualization  · UPC · Junio 2026*
