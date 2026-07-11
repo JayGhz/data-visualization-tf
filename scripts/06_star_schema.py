@@ -164,13 +164,15 @@ def build_dim_proyecto(df: pl.DataFrame) -> pl.DataFrame:
 
 def build_dim_tiempo() -> pl.DataFrame:
     """
-    dim_tiempo: calendario estandar de 2000 a 2035.
+    dim_tiempo: calendario estandar de 2000 a 2040.
     SK_Tiempo = YYYYMMDD como entero (ej: 20260101).
     Se une con fact_inversiones por las columnas SK_Tiempo_*.
+    Llega hasta 2040 porque hay proyectos con fin de ejecucion
+    planificado en 2036.
     """
     fechas = pl.date_range(
         start=pl.date(2000, 1, 1),
-        end=pl.date(2035, 12, 31),
+        end=pl.date(2040, 12, 31),
         interval="1d",
         eager=True
     )
@@ -183,9 +185,11 @@ def build_dim_tiempo() -> pl.DataFrame:
                        "Julio","Agosto","Setiembre","Octubre","Noviembre","Diciembre"][m-1],
             return_dtype=pl.String
         ).alias("NOMBRE_MES"),
-        (pl.col("FECHA").dt.year() * 10000 +
-         pl.col("FECHA").dt.month() * 100 +
-         pl.col("FECHA").dt.day()).cast(pl.Int64).alias("SK_Tiempo"),
+        # Cast a Int64 ANTES de multiplicar: dt.month()/dt.day() devuelven Int8
+        # y month*100 desborda para meses >= 2 (ej. 12*100=1200 -> -80)
+        (pl.col("FECHA").dt.year().cast(pl.Int64) * 10000 +
+         pl.col("FECHA").dt.month().cast(pl.Int64) * 100 +
+         pl.col("FECHA").dt.day().cast(pl.Int64)).alias("SK_Tiempo"),
     ])
     return dim
 
@@ -196,11 +200,13 @@ def build_dim_tiempo() -> pl.DataFrame:
 
 def fecha_a_sk(col_name: str) -> pl.Expr:
     """Convierte columna datetime a SK_Tiempo entero YYYYMMDD."""
+    # Cast a Int64 ANTES de multiplicar: dt.month()/dt.day() devuelven Int8
+    # y month*100 desborda para meses >= 2 (ej. 12*100=1200 -> -80)
     return (
-        pl.col(col_name).dt.year() * 10000 +
-        pl.col(col_name).dt.month() * 100 +
-        pl.col(col_name).dt.day()
-    ).cast(pl.Int64).fill_null(-1).alias(f"SK_Tiempo_{col_name}")
+        pl.col(col_name).dt.year().cast(pl.Int64) * 10000 +
+        pl.col(col_name).dt.month().cast(pl.Int64) * 100 +
+        pl.col(col_name).dt.day().cast(pl.Int64)
+    ).fill_null(-1).alias(f"SK_Tiempo_{col_name}")
 
 
 # ---------------------------------------------------------------------------
